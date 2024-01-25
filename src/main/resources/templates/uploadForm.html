@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Загрузка и сортировка файла</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: url('/java-worship-background.png'); /* Обновленный фон */
+            background-size: cover;
+            background-position: center;
+        }
+
+        .form-upload {
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.8); /* Небольшая прозрачность */
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .form-upload input[type="file"] {
+            width: 80%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        .form-upload button {
+            background-color: #007aff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 80%;
+        }
+
+        .form-upload button:hover {
+            background-color: #005ecb;
+        }
+    </style>
+</head>
+<body>
+<div class="form-upload">
+    <form method="POST" enctype="multipart/form-data" action="/upload">
+        <input type="file" name="file" required>
+        <button type="submit">Обработать</button>
+    </form>
+    <div>
+        <p th:text="${message}"></p>
+        <a th:href="${downloadLink}" th:if="${downloadLink != null}">Скачать обработанный файл</a>
+    </div>
+</div>
+</body>
+</html>
