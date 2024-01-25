@@ -9,10 +9,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
-	<artifactId>file-sorter</artifactId>
+	<artifactId>files-sorter</artifactId>
 	<version>1.0</version>
-	<name>file-sorter</name>
-	<description>file-sorter</description>
+	<name>files-sorter</name>
+	<description>files-sorter</description>
 
 	<properties>
 		<java.version>17</java.version>

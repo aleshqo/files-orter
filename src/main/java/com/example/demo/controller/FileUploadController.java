@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.net.MalformedURLException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 @Controller
 @AllArgsConstructor
@@ -27,6 +27,7 @@ public class FileUploadController {
 
     @GetMapping("/")
     public String uploadForm(Model model) {
+        model.addAttribute("processed", false); // Добавляем эту строку
         model.addAttribute("message", "Выберите файл для загрузки и обработки:");
         return "uploadForm";
     }
@@ -34,14 +35,30 @@ public class FileUploadController {
     @PostMapping("/upload")
     public String handleFileUpload(@RequestParam("file") MultipartFile file, Model model) {
         try {
-            long startTime = System.currentTimeMillis();
-            String sortedFilePath = fileProcessingService.processFile(file);
-            long endTime = System.currentTimeMillis();
-            long processingTime = endTime - startTime;
+            long startSortTime = System.currentTimeMillis();
+            List<String> sortedData = fileProcessingService.sortData(file);
+            long sortElapsed = System.currentTimeMillis() - startSortTime;
 
-            model.addAttribute("message", "Файл успешно обработан за " + processingTime + " мс. Вы можете скачать его ниже.");
-            model.addAttribute("downloadLink", "/download?filePath=" + URLEncoder.encode(sortedFilePath, StandardCharsets.UTF_8.toString()));
+            long startCreateFileTime = System.currentTimeMillis();
+            File sortedFile = fileProcessingService.writeDataToFile(sortedData, file.getOriginalFilename());
+            long createFileElapsed = System.currentTimeMillis() - startCreateFileTime;
+
+            long fullTime = System.currentTimeMillis() - startSortTime;
+
+            String message = String.format(""" 
+                            Время сортировки: %s мс.
+                            Время записи файла: %s мс.
+                            Общее время: %s мс.
+                            Файл вы можете скачать ниже.
+                            """,
+                    sortElapsed, createFileElapsed, fullTime
+            );
+            model.addAttribute("message", message);
+            model.addAttribute("processed", true);
+            model.addAttribute("downloadLink", "/download?filePath=" + sortedFile.getPath());
         } catch (Exception e) {
+            e.printStackTrace();
+            model.addAttribute("processed", false);
             model.addAttribute("message", "Ошибка при обработке файла: " + e.getMessage());
         }
         return "uploadForm";

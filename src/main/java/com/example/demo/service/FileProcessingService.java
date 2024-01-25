@@ -1,105 +1,106 @@
 package com.example.demo.service;
 
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
-import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.RecursiveTask;
 
 @Service
+@Slf4j
 public class FileProcessingService {
 
-    private static final int CHUNK_SIZE = 100_000; // Размер чанка для сортировки
-    private static final int THREAD_COUNT = Runtime.getRuntime().availableProcessors(); // Количество потоков
+    @Value("${file.storage-path}")
+    private String storagePath;
 
-    public String processFile(MultipartFile multipartFile) throws IOException {
-        File inputFile = convertMultiPartToFile(multipartFile);
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        List<File> sortedChunks = splitAndSortFile(inputFile, executor);
-        File outputFile = mergeSortedFiles(sortedChunks);
-        executor.shutdown();
-        return outputFile.getAbsolutePath();
-    }
+    @SneakyThrows
+    public List<String> sortData(MultipartFile multipartFile) {
+        File inputFile = convertToFile(multipartFile);
 
-    private File convertMultiPartToFile(MultipartFile file) throws IOException {
-        File convFile = new File(Objects.requireNonNull(file.getOriginalFilename()));
-        FileOutputStream fos = new FileOutputStream(convFile);
-        fos.write(file.getBytes());
-        fos.close();
-        return convFile;
-    }
-
-    private List<File> splitAndSortFile(File inputFile, ExecutorService executor) throws IOException {
-        List<File> sortedFiles = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new FileReader(inputFile))) {
             List<String> lines = new ArrayList<>();
             String line;
             while ((line = reader.readLine()) != null) {
                 lines.add(line);
-                if (lines.size() >= CHUNK_SIZE) {
-                    sortedFiles.add(sortAndSave(lines, executor));
-                    lines = new ArrayList<>();
-                }
             }
-            if (!lines.isEmpty()) {
-                sortedFiles.add(sortAndSave(lines, executor));
-            }
+
+            ForkJoinPool forkJoinPool = new ForkJoinPool();
+            return forkJoinPool.invoke(new MergeSortTask(lines));
         }
-        return sortedFiles;
     }
 
     @SneakyThrows
-    private File sortAndSave(List<String> lines, ExecutorService executor) {
-        Future<File> future = executor.submit(() -> {
-            List<String> words = lines.stream()
-                    .flatMap(line -> Arrays.stream(line.split("\\s+"))) // Разделение строк на слова
-                    .sorted() // Сортировка слов
-                    .collect(Collectors.toList());
-
-            File tempFile = File.createTempFile("sorted_chunk", ".txt");
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
-                for (String word : words) {
-                    writer.write(word);
-                    writer.newLine();
-                }
-            }
-            return tempFile;
-        });
-        return future.get();
-    }
-
-    @SneakyThrows
-    private File mergeSortedFiles(List<File> sortedFiles) {
-        File outputFile = new File("sorted_output.txt");
+    public File writeDataToFile(List<String> sortedData, String fileName) {
+        File outputFile = new File(storagePath + "sorted_" + fileName);
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
-            PriorityQueue<BufferedReader> queue = new PriorityQueue<>(Comparator.comparing(bufferedReader -> {
-                try {
-                    return bufferedReader.readLine();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    throw new RuntimeException("Ошибка mergeSortedFiles");
-                }
-            }));
-            for (File file : sortedFiles) {
-                queue.add(new BufferedReader(new FileReader(file)));
-            }
-            while (!queue.isEmpty()) {
-                BufferedReader reader = queue.poll();
-                String line = reader.readLine();
-                if (line != null) {
-                    writer.write(line);
-                    writer.newLine();
-                    queue.add(reader);
-                } else {
-                    reader.close();
-                }
+            for (String sortedLine : sortedData) {
+                writer.write(sortedLine);
+                writer.newLine();
             }
         }
         return outputFile;
+    }
+
+    private File convertToFile(MultipartFile multipartFile) throws IOException {
+        File file = new File(storagePath + Objects.requireNonNull(multipartFile.getOriginalFilename()));
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(multipartFile.getBytes());
+        }
+        return file;
+    }
+
+    private static class MergeSortTask extends RecursiveTask<List<String>> {
+        private final List<String> list;
+
+        MergeSortTask(List<String> list) {
+            this.list = list;
+        }
+
+        @Override
+        protected List<String> compute() {
+            if (list.size() <= 1) {
+                return list;
+            }
+
+            int middleIndex = list.size() / 2;
+            MergeSortTask leftTask = new MergeSortTask(list.subList(0, middleIndex));
+            MergeSortTask rightTask = new MergeSortTask(list.subList(middleIndex, list.size()));
+
+            leftTask.fork();
+            List<String> rightResult = rightTask.compute();
+            List<String> leftResult = leftTask.join();
+
+            return merge(leftResult, rightResult);
+        }
+
+        private List<String> merge(List<String> left, List<String> right) {
+            int leftIndex = 0, rightIndex = 0;
+            List<String> merged = new ArrayList<>(left.size() + right.size());
+
+            while (leftIndex < left.size() && rightIndex < right.size()) {
+                if (left.get(leftIndex).compareTo(right.get(rightIndex)) <= 0) {
+                    merged.add(left.get(leftIndex++));
+                } else {
+                    merged.add(right.get(rightIndex++));
+                }
+            }
+
+            while (leftIndex < left.size()) {
+                merged.add(left.get(leftIndex++));
+            }
+
+            while (rightIndex < right.size()) {
+                merged.add(right.get(rightIndex++));
+            }
+
+            return merged;
+        }
     }
 }
